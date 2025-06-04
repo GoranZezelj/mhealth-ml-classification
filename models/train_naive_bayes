@@ -1,0 +1,105 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
+import time
+
+# Učitavanje dataset-a sa preskakanjem prvog reda (zaglavlje)
+file_path = "../data/mhealth.csv"
+data = pd.read_csv(file_path, header=None, skiprows=1, low_memory=False, dtype=str)
+
+# Dodavanje naziva kolona
+columns = ['alx', 'aly', 'alz', 'glx', 'gly', 'glz',
+           'arx', 'ary', 'arz', 'grx', 'gry', 'grz',
+           'Activity', 'subject']
+data.columns = columns
+
+# Provera dataset-a nakon učitavanja
+print("Provera dataset-a nakon učitavanja:")
+print(data.head())
+print("Jedinstvene vrednosti u koloni 'Activity':", data['Activity'].unique())
+
+# Konverzija podataka u numeričke vrednosti gde je moguće
+for col in data.columns[:-2]:  # Sve osim 'Activity' i 'subject'
+    data[col] = pd.to_numeric(data[col], errors='coerce')
+data['Activity'] = pd.to_numeric(data['Activity'], errors='coerce')
+
+# Uklanjanje redova sa NaN vrednostima
+data.dropna(inplace=True)
+
+# Provera podataka nakon uklanjanja NaN vrednosti
+print("Provera dataset-a nakon uklanjanja NaN vrednosti:")
+print(data.head())
+print("Jedinstvene vrednosti u koloni 'Activity':", data['Activity'].unique())
+
+# Filtriranje podataka za validne aktivnosti (0-11)
+data = data[data['Activity'].isin(range(0, 12))]
+
+# Provera praznih podataka posle filtriranja
+if data.empty:
+    raise ValueError("Dataset je prazan nakon filtriranja validnih klasa aktivnosti.")
+
+# Provera podataka nakon filtriranja
+print("Provera dataset-a nakon filtriranja validnih klasa aktivnosti:")
+print(data.head())
+print("Jedinstvene vrednosti u koloni 'Activity':", data['Activity'].unique())
+
+# Priprema podataka
+X = data.drop(['Activity', 'subject'], axis=1).values
+y = data['Activity'].values
+
+# Skaliranje podataka
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+# Enkodiranje ciljne promenljive
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(y)
+
+# Podela na trening i test skup
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+
+# Kreiranje i treniranje Naive Bayes modela
+model = GaussianNB()
+
+start_time = time.time()
+model.fit(X_train, y_train)
+end_time = time.time()
+
+# Predikcije
+y_pred = model.predict(X_test)
+
+# Nazivi aktivnosti
+activity_labels = [
+    "Stajanje u mestu",
+    "Sedenje i opuštanje",
+    "Ležanje",
+    "Hodanje",
+    "Penjanje uz stepenice",
+    "Savijanje struka unapred",
+    "Podizanje ruku napred",
+    "Savijanje kolena (čučnjevi)",
+    "Vožnja bicikla",
+    "Lagano trčanje",
+    "Trčanje",
+    "Skakanje napred i nazad"
+]
+
+# Evaluacija modela
+print(f"Tačnost modela: {model.score(X_test, y_test):.4f}")
+print(f"Vreme izvršavanja: {end_time - start_time:.2f} sekundi")
+print("\nIzveštaj o klasifikaciji:")
+print(classification_report(y_test, y_pred, target_names=activity_labels))
+
+# Konfuziona matrica
+conf_matrix = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(12, 10))
+sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=activity_labels, yticklabels=activity_labels)
+plt.xlabel('Predikcija')
+plt.ylabel('Prava klasa')
+plt.title('Konfuziona matrica za Naive Bayes algoritam')
+plt.show()
