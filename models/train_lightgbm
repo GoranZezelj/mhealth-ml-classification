@@ -1,0 +1,119 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
+import lightgbm as lgb
+import time
+
+# Učitavanje dataset-a
+file_path = "../data/mhealth.csv"
+data = pd.read_csv(file_path, header=None, low_memory=False, dtype=str)
+
+# Dodavanje naziva kolona
+columns = ['alx', 'aly', 'alz', 'glx', 'gly', 'glz',
+           'arx', 'ary', 'arz', 'grx', 'gry', 'grz',
+           'Activity', 'subject']
+data.columns = columns
+
+# Provera osnovnih informacija
+print("Provera dataset-a nakon učitavanja:")
+print(data.head())
+
+# Provera vrednosti u koloni 'Activity'
+print("Jedinstvene vrednosti u koloni 'Activity' pre obrade:", data['Activity'].unique())
+
+# Konverzija kolone 'Activity' u numeričke vrednosti
+data['Activity'] = pd.to_numeric(data['Activity'], errors='coerce')
+
+# Provera vrednosti nakon konverzije
+print("Jedinstvene vrednosti u koloni 'Activity' nakon konverzije:", data['Activity'].unique())
+
+# Uklanjanje redova sa NaN vrednostima
+data.dropna(subset=['Activity'], inplace=True)
+
+# Filtriranje validnih vrednosti aktivnosti (0–11)
+data = data[data['Activity'].isin(range(0, 12))]
+
+# Provera dataset-a nakon filtriranja
+if data.empty:
+    raise ValueError("Dataset je prazan nakon filtriranja validnih klasa aktivnosti.")
+
+print("Provera validnih klasa aktivnosti nakon filtriranja:", data['Activity'].unique())
+
+# Priprema podataka
+X = data.drop(['Activity', 'subject'], axis=1).values
+y = data['Activity'].values
+
+# Skaliranje podataka
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+# Enkodiranje ciljne promenljive
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(y)
+
+# Podela na trening i test skup
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+
+# Kreiranje LightGBM dataset-a
+train_data = lgb.Dataset(X_train, label=y_train)
+test_data = lgb.Dataset(X_test, label=y_test)
+
+# Parametri modela
+params = {
+    'objective': 'multiclass',
+    'num_class': 12,
+    'metric': 'multi_logloss',
+    'boosting_type': 'gbdt',
+    'learning_rate': 0.1,
+    'num_leaves': 31,
+    'max_depth': -1,
+    'feature_fraction': 0.8,
+    'bagging_fraction': 0.8,
+    'bagging_freq': 5,
+    'verbosity': -1
+}
+
+# Treniranje modela
+start_time = time.time()
+model = lgb.train(params, train_data, valid_sets=[test_data], num_boost_round=200, callbacks=[lgb.early_stopping(stopping_rounds=20)])
+end_time = time.time()
+
+# Predikcije
+y_pred = model.predict(X_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+
+# Nazivi aktivnosti
+activity_labels = [
+    "Stajanje u mestu",
+    "Sedenje i opuštanje",
+    "Ležanje",
+    "Hodanje",
+    "Penjanje uz stepenice",
+    "Savijanje struka unapred",
+    "Podizanje ruku napred",
+    "Savijanje kolena (čučnjevi)",
+    "Vožnja bicikla",
+    "Lagano trčanje",
+    "Trčanje",
+    "Skakanje napred i nazad"
+]
+
+# Evaluacija modela
+print(f"Tačnost modela: {np.mean(y_pred_classes == y_test):.4f}")
+print(f"Vreme izvršavanja: {end_time - start_time:.2f} sekundi")
+
+print("\nIzveštaj o klasifikaciji:")
+print(classification_report(y_test, y_pred_classes, target_names=activity_labels))
+
+# Konfuziona matrica
+conf_matrix = confusion_matrix(y_test, y_pred_classes)
+plt.figure(figsize=(12, 10))
+sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", xticklabels=activity_labels, yticklabels=activity_labels)
+plt.xlabel('Predikcija')
+plt.ylabel('Prava klasa')
+plt.title('Konfuziona matrica za LightGBM algoritam')
+plt.show()
